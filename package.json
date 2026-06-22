@@ -1,16 +1,24 @@
 {
   "name": "drizzle-orm-tursodb",
   "version": "0.0.0",
-  "description": "A starter for creating a TypeScript package.",
-  "homepage": "https://github.com/author/library#readme",
+  "description": "A Drizzle ORM driver for a local tursodb sync-server: an async libsql driver that runs migrations and transactions without an explicit BEGIN (which local tursodb rejects).",
+  "keywords": [
+    "drizzle",
+    "drizzle-orm",
+    "libsql",
+    "sqlite",
+    "turso",
+    "tursodb"
+  ],
+  "homepage": "https://github.com/leonsilicon/drizzle-orm-tursodb#readme",
   "bugs": {
-    "url": "https://github.com/author/library/issues"
+    "url": "https://github.com/leonsilicon/drizzle-orm-tursodb/issues"
   },
   "license": "MIT",
-  "author": "Author Name <author.name@mail.com>",
+  "author": "Leon Si <leon@leonsilicon.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/author/library.git"
+    "url": "git+https://github.com/leonsilicon/drizzle-orm-tursodb.git"
   },
   "files": [
     "dist"
@@ -18,6 +26,9 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.mjs",
+    "./driver": "./dist/driver.mjs",
+    "./is-local-turso-url": "./dist/is-local-turso-url.mjs",
+    "./session": "./dist/session.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -32,12 +43,18 @@
     "prepare": "vp config"
   },
   "devDependencies": {
+    "@libsql/client": "^0.17.4",
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
+    "drizzle-orm": "1.0.0-rc.4-5d5b77c",
     "typescript": "^6.0.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
     "vite-plus": "latest"
+  },
+  "peerDependencies": {
+    "@libsql/client": "^0.17.0",
+    "drizzle-orm": "^1.0.0-rc.4"
   },
   "overrides": {
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",

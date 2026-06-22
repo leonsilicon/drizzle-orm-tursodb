@@ -5,6 +5,7 @@ export default defineConfig({
     "*": "vp check --fix",
   },
   pack: {
+    entry: ["src/index.ts", "src/driver.ts", "src/session.ts", "src/is-local-turso-url.ts"],
     dts: {
       tsgo: true,
     },
