@@ -1,6 +1,6 @@
 {
   "name": "drizzle-orm-tursodb",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A Drizzle ORM driver for a local tursodb sync-server: an async libsql driver that runs migrations and transactions without an explicit BEGIN (which local tursodb rejects).",
   "keywords": [
     "drizzle",
@@ -47,7 +47,7 @@
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
-    "drizzle-orm": "1.0.0-rc.4-5d5b77c",
+    "drizzle-orm": "1.0.0-rc.4",
     "typescript": "^6.0.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
     "vite-plus": "latest"

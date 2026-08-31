@@ -21,7 +21,9 @@ import {
 import * as V1 from "drizzle-orm/_relations";
 import type { Client, ResultSet } from "@libsql/client";
 import { LibSQLDatabase } from "drizzle-orm/libsql/driver-core";
-import { SQLiteAsyncDialect, type SQLiteSession } from "drizzle-orm/sqlite-core";
+// drizzle-orm 1.0.0-rc.4 collapsed the sync/async dialects into one `SQLiteDialect`, and moved the
+// session class into the `async/` namespace as `SQLiteAsyncSession`.
+import { SQLiteDialect, type SQLiteAsyncSession } from "drizzle-orm/sqlite-core";
 
 import { TursodbSession } from "./session.ts";
 
@@ -35,9 +37,9 @@ export function drizzle<
   TRelations extends AnyRelations = EmptyRelations,
 >(
   config: TursodbDrizzleConfig<TSchema, TRelations>,
-): LibSQLDatabase<TSchema, TRelations> & { $client: Client } {
+): LibSQLDatabase<TRelations> & { $client: Client } {
   const { client, ...drizzleConfig } = config;
-  const dialect = new SQLiteAsyncDialect();
+  const dialect = new SQLiteDialect();
 
   let logger: Logger | undefined;
   if (drizzleConfig.logger === true) {
@@ -71,22 +73,17 @@ export function drizzle<
     },
   );
 
-  const db = new LibSQLDatabase<TSchema, TRelations>(
+  const db = new LibSQLDatabase<TRelations>(
     "async",
     dialect,
     // `TursodbSession` is a `LibSQLSession` subclass, hence structurally the
     // `SQLiteSession` the database constructor wants; the explicit generic just
     // restates that for the type checker.
-    session as SQLiteSession<
-      "async",
-      ResultSet,
-      TSchema,
-      TRelations,
-      V1.ExtractTablesWithRelations<TSchema>
-    >,
+    // rc.4: SQLiteAsyncSession<TResultKind, TRunResult, TRelations>; the database ctor also dropped
+    // its trailing `schema` argument.
+    session as SQLiteAsyncSession<"async", ResultSet, TRelations>,
     relations,
-    schema,
-  ) as LibSQLDatabase<TSchema, TRelations> & { $client: Client };
+  ) as LibSQLDatabase<TRelations> & { $client: Client };
   db.$client = client;
   return db;
 }

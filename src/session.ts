@@ -27,18 +27,18 @@ import type * as V1 from "drizzle-orm/_relations";
 import { entityKind, type AnyRelations } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import type { Client, InArgs } from "@libsql/client";
-import {
-  LibSQLSession,
-  LibSQLTransaction,
-  type LibSQLPreparedQuery,
-} from "drizzle-orm/libsql/session";
-import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core";
+import { LibSQLSession, LibSQLTransaction } from "drizzle-orm/libsql/session";
+// rc.4: the sync/async dialect pair collapsed into a single `SQLiteDialect`.
+import type { BatchResponse } from "drizzle-orm/batch";
+import type { SQLiteAsyncPreparedQuery, SQLiteDialect } from "drizzle-orm/sqlite-core";
 
 type SQLiteBatchItem = BatchItem<"sqlite">;
 
 /** The prepared-query surface the base `batch`/`migrate` rely on. */
 interface PreparableQuery {
-  _prepare: () => LibSQLPreparedQuery & {
+  // rc.4 removed `LibSQLPreparedQuery`; the prepared query is a `SQLiteAsyncPreparedQuery` now, and
+  // this is a structural shape rather than a nominal one.
+  _prepare: () => SQLiteAsyncPreparedQuery<never> & {
     getQuery: () => { params: unknown[]; sql: string };
     mapResult: (response: unknown, isFromBatch?: boolean) => unknown;
   };
@@ -82,52 +82,60 @@ export class TursodbSession<
   TFullSchema extends Record<string, unknown>,
   TRelations extends AnyRelations,
   TSchema extends V1.TablesRelationalConfig,
-> extends LibSQLSession<TFullSchema, TRelations, TSchema> {
+  // rc.4: `LibSQLSession<TRelations>` — the `TFullSchema`/`TSchema` generics were dropped.
+> extends LibSQLSession<TRelations> {
   static override readonly [entityKind]: string = "TursodbSession";
 
   // The base stores `dialect` as an `@internal` constructor param-property,
   // which isn't visible to subclasses through the public typings. Keep our own
   // reference so `transaction(...)` can build a `LibSQLTransaction`.
-  private readonly localDialect: SQLiteAsyncDialect;
+  private readonly localDialect: SQLiteDialect;
 
   constructor(
     private localClient: Client,
-    dialect: SQLiteAsyncDialect,
+    dialect: SQLiteDialect,
     private localRelations: TRelations,
-    private localSchema: V1.RelationalSchemaConfig<TSchema> | undefined,
-    options: ConstructorParameters<typeof LibSQLSession>[4],
+    // Kept as a plain PARAMETER, not a field: rc.4 no longer threads a schema config anywhere, so
+    // storing it left it provably unread. The ctor position stays for API compatibility.
+    localSchema: V1.RelationalSchemaConfig<TSchema> | undefined,
+    // rc.4 ctor: (client, dialect, relations, options, tx) — `schema` was removed, so `options`
+    // moved from index 4 to index 3.
+    options: ConstructorParameters<typeof LibSQLSession>[3],
   ) {
     // `tx = undefined`: this session never runs inside a libsql Transaction
     // handle (that is exactly the BEGIN we are avoiding).
-    super(localClient, dialect, localRelations, localSchema, options, undefined);
+    super(localClient, dialect, localRelations, options, undefined);
     this.localDialect = dialect;
   }
 
-  override async batch<T extends SQLiteBatchItem[] | readonly SQLiteBatchItem[]>(
+  // rc.4 types these as `Promise<BatchResponse<T>>`. This driver deliberately runs the statements
+  // SEQUENTIALLY (tursodb cannot run libsql's batched BEGIN), and the caller only consumes the row
+  // arrays, so assert to the declared shape rather than widen the base's contract.
+  async batch<T extends SQLiteBatchItem[] | readonly SQLiteBatchItem[]>(
     queries: T,
-  ): Promise<unknown[]> {
-    return runStatementsSequentially(this.localClient, queries);
+  ): Promise<BatchResponse<T>> {
+    return (await runStatementsSequentially(this.localClient, queries)) as BatchResponse<T>;
   }
 
-  override async migrate<T extends SQLiteBatchItem[] | readonly SQLiteBatchItem[]>(
+  async migrate<T extends SQLiteBatchItem[] | readonly SQLiteBatchItem[]>(
     queries: T,
-  ): Promise<unknown[]> {
-    return runStatementsSequentially(this.localClient, queries);
+  ): Promise<BatchResponse<T>> {
+    return (await runStatementsSequentially(this.localClient, queries)) as BatchResponse<T>;
   }
 
   override async transaction<T>(
-    transaction: (tx: LibSQLTransaction<TFullSchema, TRelations, TSchema>) => T | Promise<T>,
+    transaction: (tx: LibSQLTransaction<TRelations>) => T | Promise<T>,
   ): Promise<T> {
     // No `begin`/`commit` — run the callback against a transaction view backed
     // by this same (autocommitting) session. Local tursodb already wraps each
     // statement implicitly, so the writes still land; we just skip the explicit
     // transaction frame it rejects.
-    const tx = new LibSQLTransaction<TFullSchema, TRelations, TSchema>(
+    const tx = new LibSQLTransaction<TRelations>(
       "async",
       this.localDialect,
       this,
+      // rc.4 dropped the trailing `schema` argument (the next slot is `nestedIndex: number`).
       this.localRelations,
-      this.localSchema,
     );
     return await transaction(tx);
   }
