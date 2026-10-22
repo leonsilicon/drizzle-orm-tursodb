@@ -1,6 +1,6 @@
 {
   "name": "drizzle-orm-tursodb",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A Drizzle ORM driver for a local tursodb sync-server: an async libsql driver that runs migrations and transactions without an explicit BEGIN (which local tursodb rejects).",
   "keywords": [
     "drizzle",
