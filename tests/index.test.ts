@@ -46,3 +46,42 @@ test("batch() runs statements sequentially", async () => {
   const rows = await db.select().from(users);
   expect(rows).toHaveLength(2);
 });
+
+const notes = sqliteTable("notes", {
+  id: integer("id").primaryKey(),
+  pinned: integer("pinned", { mode: "boolean" }).notNull(),
+  settings: text("settings", { mode: "json" }).$type<{ theme: string }>().notNull(),
+});
+
+test("decodes booleans and JSON through drizzle's codecs, in queries and batches", async () => {
+  const client = createClient({ url: ":memory:" });
+  const db = drizzle({ client });
+  await db.run(
+    sql`create table notes (id integer primary key, pinned integer not null, settings text not null)`,
+  );
+  await db.insert(notes).values([
+    { id: 1, pinned: true, settings: { theme: "dark" } },
+    { id: 2, pinned: false, settings: { theme: "light" } },
+  ]);
+
+  // drizzle-orm 1.0.0-rc.5 decodes these in the dialect's codecs: without them, 1 and a JSON string.
+  expect(
+    await db
+      .select()
+      .from(notes)
+      .where(sql`id = 1`),
+  ).toEqual([{ id: 1, pinned: true, settings: { theme: "dark" } }]);
+
+  const [all, second] = await db.batch([
+    db.select().from(notes),
+    db
+      .select({ settings: notes.settings })
+      .from(notes)
+      .where(sql`id = 2`),
+  ]);
+  expect(all).toEqual([
+    { id: 1, pinned: true, settings: { theme: "dark" } },
+    { id: 2, pinned: false, settings: { theme: "light" } },
+  ]);
+  expect(second).toEqual([{ settings: { theme: "light" } }]);
+});

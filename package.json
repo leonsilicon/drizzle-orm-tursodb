@@ -43,18 +43,18 @@
     "prepare": "vp config"
   },
   "devDependencies": {
-    "@libsql/client": "^0.17.4",
+    "@libsql/client": "^0.18.0",
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
-    "drizzle-orm": "1.0.0-rc.4",
+    "drizzle-orm": "1.0.0-rc.5",
     "typescript": "^6.0.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
     "vite-plus": "latest"
   },
   "peerDependencies": {
-    "@libsql/client": "^0.17.0",
-    "drizzle-orm": "^1.0.0-rc.4"
+    "@libsql/client": "^0.17.0 || ^0.18.0",
+    "drizzle-orm": "^1.0.0-rc.5"
   },
   "overrides": {
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",

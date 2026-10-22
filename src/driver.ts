@@ -11,26 +11,25 @@
 // official `drizzle` from `drizzle-orm/libsql`; pick between them by URL (see
 // `isLocalTursoUrl`).
 
-import {
-  DefaultLogger,
-  type AnyRelations,
-  type DrizzleConfig,
-  type EmptyRelations,
-  type Logger,
-} from "drizzle-orm";
+import { DefaultLogger, type AnyRelations, type EmptyRelations, type Logger } from "drizzle-orm";
 import * as V1 from "drizzle-orm/_relations";
 import type { Client, ResultSet } from "@libsql/client";
+import { libsqlCodecs } from "drizzle-orm/libsql/codecs";
 import { LibSQLDatabase } from "drizzle-orm/libsql/driver-core";
 // drizzle-orm 1.0.0-rc.4 collapsed the sync/async dialects into one `SQLiteDialect`, and moved the
 // session class into the `async/` namespace as `SQLiteAsyncSession`.
-import { SQLiteDialect, type SQLiteAsyncSession } from "drizzle-orm/sqlite-core";
+import {
+  SQLiteDialect,
+  type DrizzleSQLiteConfig,
+  type SQLiteAsyncSession,
+} from "drizzle-orm/sqlite-core";
 
 import { TursodbSession } from "./session.ts";
 
 export type TursodbDrizzleConfig<
   TSchema extends Record<string, unknown>,
   TRelations extends AnyRelations,
-> = DrizzleConfig<TSchema, TRelations> & { client: Client };
+> = DrizzleSQLiteConfig<TRelations> & { client: Client; schema?: TSchema | undefined };
 
 export function drizzle<
   TSchema extends Record<string, unknown> = Record<string, never>,
@@ -39,7 +38,10 @@ export function drizzle<
   config: TursodbDrizzleConfig<TSchema, TRelations>,
 ): LibSQLDatabase<TRelations> & { $client: Client } {
   const { client, ...drizzleConfig } = config;
-  const dialect = new SQLiteDialect();
+  // drizzle-orm 1.0.0-rc.5 moved value decoding (integer booleans, `text` JSON, timestamps, blobs and
+  // their in-JSON casts) from the column classes into dialect codecs, which `drizzle-orm/libsql`
+  // passes as `libsqlCodecs`. Without them booleans read back as 0/1 and JSON columns as strings.
+  const dialect = new SQLiteDialect({ codecs: drizzleConfig.codecs ?? libsqlCodecs });
 
   let logger: Logger | undefined;
   if (drizzleConfig.logger === true) {
@@ -70,6 +72,7 @@ export function drizzle<
     {
       cache: drizzleConfig.cache,
       logger,
+      paramsInErrors: drizzleConfig.paramsInErrors,
     },
   );
 

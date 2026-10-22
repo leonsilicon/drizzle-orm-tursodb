@@ -26,21 +26,27 @@
 import type * as V1 from "drizzle-orm/_relations";
 import { entityKind, type AnyRelations } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
-import type { Client, InArgs } from "@libsql/client";
+import type { Client, InArgs, Row } from "@libsql/client";
 import { LibSQLSession, LibSQLTransaction } from "drizzle-orm/libsql/session";
 // rc.4: the sync/async dialect pair collapsed into a single `SQLiteDialect`.
 import type { BatchResponse } from "drizzle-orm/batch";
-import type { SQLiteAsyncPreparedQuery, SQLiteDialect } from "drizzle-orm/sqlite-core";
+import type {
+  SQLiteAsyncPreparedQuery,
+  SQLiteDialect,
+  SQLiteExecuteMethod,
+} from "drizzle-orm/sqlite-core";
 
 type SQLiteBatchItem = BatchItem<"sqlite">;
 
 /** The prepared-query surface the base `batch`/`migrate` rely on. */
 interface PreparableQuery {
-  // rc.4 removed `LibSQLPreparedQuery`; the prepared query is a `SQLiteAsyncPreparedQuery` now, and
-  // this is a structural shape rather than a nominal one.
+  // The public `BatchItem` type does not surface `_prepare()`; this is a structural shape. Since
+  // rc.4 the prepared query is a `SQLiteAsyncPreparedQuery`, which carries its `executeMethod`, row
+  // `mode` and result `mapper` (rc.4 already removed the `mapResult` this driver used to call).
   _prepare: () => SQLiteAsyncPreparedQuery<never> & {
-    getQuery: () => { params: unknown[]; sql: string };
-    mapResult: (response: unknown, isFromBatch?: boolean) => unknown;
+    // Public at runtime but `@internal` in the typings.
+    executeMethod: SQLiteExecuteMethod;
+    mapper: ((rows: unknown[]) => unknown) | undefined;
   };
 }
 
@@ -55,11 +61,29 @@ function asPreparable(query: SQLiteBatchItem): PreparableQuery {
 }
 
 /**
+ * The libSQL client returns rows that read both as objects and as arrays, and are not iterable;
+ * drizzle's mappers want plain arrays or plain objects. Copied from `drizzle-orm/libsql/session`,
+ * which does not export them.
+ */
+function toArrayRow(row: Row): unknown[] {
+  return Array.prototype.slice.call(row);
+}
+
+function normalizeRow(row: Row): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const key of Object.keys(row)) {
+    if (Object.prototype.propertyIsEnumerable.call(row, key)) {
+      normalized[key] = row[key];
+    }
+  }
+  return normalized;
+}
+
+/**
  * Runs each query's built statement through `client.execute` in order — the
  * transactionless equivalent of the base session's `client.batch` /
- * `client.migrate`. Reuses drizzle's own `_prepare()` / `getQuery()` /
- * `mapResult()` so result shaping stays identical to a real batch
- * (`isFromBatch = true`).
+ * `client.migrate`. Each result is shaped exactly as `LibSQLSession.batch` shapes it, from the
+ * prepared query's `executeMethod`, `mode` and `mapper`.
  */
 async function runStatementsSequentially(
   client: Client,
@@ -73,7 +97,20 @@ async function runStatementsSequentially(
       args: built.params as InArgs,
       sql: built.sql,
     });
-    results.push(prepared.mapResult(result, true));
+    const { executeMethod, mapper, mode } = prepared;
+    if (executeMethod === "run") {
+      results.push(result);
+    } else if (executeMethod === "values") {
+      results.push(result.rows.map(toArrayRow));
+    } else if (executeMethod === "get") {
+      const row = result.rows[0];
+      const value =
+        row === undefined ? undefined : mode === "arrays" ? toArrayRow(row) : normalizeRow(row);
+      results.push(value === undefined || !mapper ? value : (mapper([value]) as unknown[])[0]);
+    } else {
+      const rows = mode === "arrays" ? result.rows.map(toArrayRow) : result.rows.map(normalizeRow);
+      results.push(mapper ? mapper(rows) : rows);
+    }
   }
   return results;
 }
